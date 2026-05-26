@@ -7,6 +7,3 @@ dist/
 npm-debug.log*
 bot/node_modules/
 bot/.env
-backend/node_modules/
-backend/.env
-backend/data/
