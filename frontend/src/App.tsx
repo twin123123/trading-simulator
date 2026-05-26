@@ -23,6 +23,8 @@ type Trade = {
   delay: number
 }
 
+type WalletScreen = 'wallet' | 'withdraw'
+
 const FINAL_BALANCE = 20000
 
 // Сейчас 60 секунд для теста.
@@ -42,7 +44,9 @@ function makeId() {
 }
 
 function formatAmount(value: number) {
-  return value.toLocaleString('ru-RU')
+  return value.toLocaleString('ru-RU', {
+    maximumFractionDigits: 2,
+  })
 }
 
 function getCurrentDate() {
@@ -87,7 +91,11 @@ function App() {
     iban: '',
   })
 
+  const [screen, setScreen] = useState<WalletScreen>('wallet')
+
   const [balance, setBalance] = useState(0)
+  const [blockedAmount, setBlockedAmount] = useState(0)
+  const [withdrawAmount, setWithdrawAmount] = useState('')
   const [transactions, setTransactions] = useState<Transaction[]>([])
 
   const [isTrading, setIsTrading] = useState(false)
@@ -98,6 +106,15 @@ function App() {
   const [completedTradesCount, setCompletedTradesCount] = useState(0)
 
   const [showHistory, setShowHistory] = useState(false)
+  const [notice, setNotice] = useState('')
+
+  function showNotice(text: string) {
+    setNotice(text)
+
+    window.setTimeout(() => {
+      setNotice('')
+    }, 3500)
+  }
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const { name, value } = event.target
@@ -145,7 +162,11 @@ function App() {
     setPlannedTradesCount(trades.length)
     setCompletedTradesCount(0)
     setBalance(0)
+    setBlockedAmount(0)
     setTransactions([])
+    setShowHistory(false)
+
+    showNotice('Симуляция торговли запущена')
 
     trades.forEach((trade, index) => {
       window.setTimeout(() => {
@@ -170,9 +191,56 @@ function App() {
         if (isLastTrade) {
           setIsTrading(false)
           setTradingFinished(true)
+          showNotice('Симуляция завершена. Баланс: 20 000 USDT')
         }
       }, trade.delay)
     })
+  }
+
+  function openWithdrawScreen() {
+    if (isTrading) {
+      showNotice('Вывод доступен после завершения симуляции')
+      return
+    }
+
+    if (balance <= 0) {
+      showNotice('На балансе пока нет средств для демо-заявки')
+      return
+    }
+
+    setWithdrawAmount('')
+    setScreen('withdraw')
+  }
+
+  function handleCreateWithdrawal(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const normalizedAmount = withdrawAmount.replace(',', '.')
+    const amount = Number(normalizedAmount)
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showNotice('Введите корректную сумму')
+      return
+    }
+
+    if (amount > balance) {
+      showNotice('Сумма вывода больше доступного баланса')
+      return
+    }
+
+    setBalance((currentBalance) => currentBalance - amount)
+    setBlockedAmount((currentBlockedAmount) => currentBlockedAmount + amount)
+
+    addTransaction({
+      type: 'заявка на вывод',
+      amount: -amount,
+      status: '🟡 в процессе',
+    })
+
+    setWithdrawAmount('')
+    setScreen('wallet')
+    setShowHistory(true)
+    showNotice('Заявка на вывод создана')
   }
 
   if (!user) {
@@ -241,8 +309,12 @@ function App() {
     <main className="app">
       <section className="wallet">
         <header className="wallet-header">
-          <button className="icon-button" type="button">
-            ☰
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => setScreen('wallet')}
+          >
+            {screen === 'withdraw' ? '←' : '☰'}
           </button>
 
           <div className="account-chip">
@@ -259,147 +331,258 @@ function App() {
           </button>
         </header>
 
-        <section className="hero-balance">
-          <p>Демо-баланс</p>
-          <h1>{formatAmount(balance)} USDT</h1>
-          <span>Виртуальный счет · реальные средства не используются</span>
-        </section>
+        {notice && <div className="notice">{notice}</div>}
 
-        <section className="quick-actions">
-          {!tradingStarted && (
-            <button
-              className="round-action primary"
-              type="button"
-              onClick={startTradingSimulation}
-            >
-              <span>▶</span>
-              <small>Торговля</small>
-            </button>
-          )}
+        {screen === 'withdraw' && (
+          <section className="withdraw-card">
+            <div className="withdraw-header">
+              <p>Демо-заявка</p>
+              <h1>Вывод средств</h1>
+              <span>
+                Сумма будет заблокирована и добавлена в историю со статусом
+                “в процессе”.
+              </span>
+            </div>
 
-          <button
-            className="round-action"
-            type="button"
-            onClick={() => alert('Форму вывода сделаем следующим этапом')}
-          >
-            <span>↗</span>
-            <small>Вывод</small>
-          </button>
-
-          <button
-            className="round-action"
-            type="button"
-            onClick={() => setShowHistory(!showHistory)}
-          >
-            <span>≡</span>
-            <small>История</small>
-          </button>
-
-          <button
-            className="round-action"
-            type="button"
-            onClick={() => window.open(MANAGER_LINK, '_blank')}
-          >
-            <span>💬</span>
-            <small>Менеджер</small>
-          </button>
-        </section>
-
-        {(isTrading || tradingFinished) && (
-          <section className="simulation-card">
-            <div className="simulation-top">
+            <div className="withdraw-summary">
               <div>
-                <p>{isTrading ? 'Симуляция запущена' : 'Симуляция завершена'}</p>
-
-                <strong>
-                  Сделки: {completedTradesCount} / {plannedTradesCount}
-                </strong>
+                <span>Доступно</span>
+                <strong>{formatAmount(balance)} USDT</strong>
               </div>
 
-              <div className={isTrading ? 'status-dot pulse' : 'status-dot'} />
+              <div>
+                <span>Заблокировано</span>
+                <strong>{formatAmount(blockedAmount)} USDT</strong>
+              </div>
             </div>
 
-            <div className="progress">
-              <div
-                style={{
-                  width:
-                    plannedTradesCount > 0
-                      ? `${(completedTradesCount / plannedTradesCount) * 100}%`
-                      : '0%',
-                }}
-              />
-            </div>
+            <form className="withdraw-form" onSubmit={handleCreateWithdrawal}>
+              <label>
+                Сумма вывода
+                <input
+                  value={withdrawAmount}
+                  onChange={(event) => setWithdrawAmount(event.target.value)}
+                  placeholder="1000"
+                  inputMode="decimal"
+                  required
+                />
+              </label>
 
-            {tradingFinished && (
-              <p className="finish-text">
-                Итоговый баланс: 20 000 USDT
-              </p>
-            )}
+              <label>
+                Номер счета
+                <input
+                  className="readonly-input"
+                  value={user.accountNumber}
+                  readOnly
+                />
+              </label>
+
+              <label>
+                IBAN
+                <input className="readonly-input" value={user.iban} readOnly />
+              </label>
+
+              <div className="form-actions">
+                <button type="submit">Создать заявку</button>
+
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => setScreen('wallet')}
+                >
+                  Назад
+                </button>
+              </div>
+            </form>
           </section>
         )}
 
-        <section className="assets-card">
-          <div className="section-title">
-            <h2>Активы</h2>
-            <span>1</span>
-          </div>
+        {screen === 'wallet' && (
+          <>
+            <section className="hero-balance">
+              <p>Демо-баланс</p>
+              <h1>{formatAmount(balance)} USDT</h1>
+              <span>Виртуальный счет · реальные средства не используются</span>
+            </section>
 
-          <div className="asset-row">
-            <div className="asset-icon">₮</div>
+            <section className="quick-actions">
+              {!tradingStarted && (
+                <button
+                  className="round-action primary"
+                  type="button"
+                  onClick={startTradingSimulation}
+                >
+                  <span>▶</span>
+                  <small>Торговля</small>
+                </button>
+              )}
 
-            <div className="asset-info">
-              <strong>Demo USDT</strong>
-              <span>Trading Simulator</span>
-            </div>
+              <button
+                className="round-action"
+                type="button"
+                onClick={openWithdrawScreen}
+              >
+                <span>↗</span>
+                <small>Вывод</small>
+              </button>
 
-            <div className="asset-balance">
-              <strong>{formatAmount(balance)}</strong>
-              <span>USDT</span>
-            </div>
-          </div>
-        </section>
+              <button
+                className="round-action"
+                type="button"
+                onClick={() => setShowHistory(!showHistory)}
+              >
+                <span>≡</span>
+                <small>История</small>
+              </button>
 
-        {showHistory && (
-          <section className="history-panel">
-            <div className="section-title">
-              <h2>История</h2>
-              <span>{transactions.length}</span>
-            </div>
+              <button
+                className="round-action"
+                type="button"
+                onClick={() => window.open(MANAGER_LINK, '_blank')}
+              >
+                <span>💬</span>
+                <small>Менеджер</small>
+              </button>
+            </section>
 
-            {transactions.length === 0 && (
-              <p className="empty">Пока нет операций</p>
+            {(isTrading || tradingFinished) && (
+              <section className="simulation-card">
+                <div className="simulation-top">
+                  <div>
+                    <p>
+                      {isTrading
+                        ? 'Симуляция запущена'
+                        : 'Симуляция завершена'}
+                    </p>
+
+                    <strong>
+                      Сделки: {completedTradesCount} / {plannedTradesCount}
+                    </strong>
+                  </div>
+
+                  <div
+                    className={isTrading ? 'status-dot pulse' : 'status-dot'}
+                  />
+                </div>
+
+                <div className="progress">
+                  <div
+                    style={{
+                      width:
+                        plannedTradesCount > 0
+                          ? `${
+                              (completedTradesCount / plannedTradesCount) * 100
+                            }%`
+                          : '0%',
+                    }}
+                  />
+                </div>
+
+                {tradingFinished && (
+                  <p className="finish-text">Итоговый баланс: 20 000 USDT</p>
+                )}
+              </section>
             )}
 
-            {transactions.map((transaction) => (
-              <div className="transaction" key={transaction.id}>
-                <div>
-                  <strong>{transaction.type}</strong>
-                  <span>{transaction.date}</span>
+            <section className="assets-card">
+              <div className="section-title">
+                <h2>Активы</h2>
+                <span>{blockedAmount > 0 ? 2 : 1}</span>
+              </div>
+
+              <div className="asset-row">
+                <div className="asset-icon">₮</div>
+
+                <div className="asset-info">
+                  <strong>Demo USDT</strong>
+                  <span>Доступный баланс</span>
                 </div>
 
-                <div className="transaction-right">
-                  <strong>+{formatAmount(transaction.amount)} USDT</strong>
-                  <span>{transaction.status}</span>
+                <div className="asset-balance">
+                  <strong>{formatAmount(balance)}</strong>
+                  <span>USDT</span>
                 </div>
               </div>
-            ))}
-          </section>
+
+              {blockedAmount > 0 && (
+                <div className="asset-row">
+                  <div className="asset-icon locked">🔒</div>
+
+                  <div className="asset-info">
+                    <strong>Blocked USDT</strong>
+                    <span>Заявки в процессе</span>
+                  </div>
+
+                  <div className="asset-balance">
+                    <strong>{formatAmount(blockedAmount)}</strong>
+                    <span>USDT</span>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {showHistory && (
+              <section className="history-panel">
+                <div className="section-title">
+                  <h2>История</h2>
+                  <span>{transactions.length}</span>
+                </div>
+
+                {transactions.length === 0 && (
+                  <p className="empty">Пока нет операций</p>
+                )}
+
+                {transactions.map((transaction) => {
+                  const isNegative = transaction.amount < 0
+                  const amountText = `${isNegative ? '-' : '+'}${formatAmount(
+                    Math.abs(transaction.amount),
+                  )} USDT`
+
+                  return (
+                    <div className="transaction" key={transaction.id}>
+                      <div>
+                        <strong>{transaction.type}</strong>
+                        <span>{transaction.date}</span>
+                      </div>
+
+                      <div className="transaction-right">
+                        <strong className={isNegative ? 'negative' : ''}>
+                          {amountText}
+                        </strong>
+                        <span>{transaction.status}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </section>
+            )}
+          </>
         )}
 
         <nav className="bottom-nav">
-          <button className="active" type="button">
+          <button
+            className={screen === 'wallet' ? 'active' : ''}
+            type="button"
+            onClick={() => setScreen('wallet')}
+          >
             <span>●</span>
             Кошелек
           </button>
 
-          <button type="button">
-            <span>◆</span>
-            Активы
+          <button type="button" onClick={openWithdrawScreen}>
+            <span>↗</span>
+            Вывод
           </button>
 
-          <button type="button">
-            <span>▣</span>
-            Профиль
+          <button
+            type="button"
+            onClick={() => {
+              setScreen('wallet')
+              setShowHistory(true)
+            }}
+          >
+            <span>≡</span>
+            История
           </button>
         </nav>
       </section>
