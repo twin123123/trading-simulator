@@ -1,0 +1,42 @@
+name: Test Telegram Bot
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install bot dependencies
+        working-directory: bot
+        run: npm ci
+
+      - name: Create env file
+        working-directory: bot
+        run: |
+          echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" > .env
+          echo "WEB_APP_URL=https://twin123123.github.io/trading-simulator/" >> .env
+
+      - name: Run bot for 10 minutes
+        working-directory: bot
+        run: |
+          set +e
+          timeout 600 npm start
+          CODE=$?
+
+          if [ "$CODE" -eq 124 ]; then
+            echo "Test time finished"
+            exit 0
+          fi
+
+          exit "$CODE"
