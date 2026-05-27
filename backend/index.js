@@ -4,6 +4,7 @@ const crypto = require('crypto')
 const express = require('express')
 const cors = require('cors')
 const { initDb, query, dbPath } = require('./db')
+const adminRouter = require('./admin')
 
 const app = express()
 
@@ -21,6 +22,7 @@ const activeSimulationTimers = new Map()
 
 app.use(cors())
 app.use(express.json())
+app.use('/api/admin', adminRouter)
 
 function makeId() {
   return crypto.randomUUID()
