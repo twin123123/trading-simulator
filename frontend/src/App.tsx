@@ -102,7 +102,7 @@ type TelegramProfile = {
   username: string | null
 }
 
-const API_BASE_URL = 'http://localhost:4000'
+const API_BASE_URL = 'https://trading-simulator-backend-gad1.onrender.com'
 
 const MANAGER_LINK = 'https://t.me/username'
 

@@ -61,7 +61,7 @@ type UserProfile = {
 
 type BalanceOperation = 'add' | 'set'
 
-const API_BASE_URL = 'http://localhost:4000'
+const API_BASE_URL = 'https://trading-simulator-backend-gad1.onrender.com'
 
 class ApiError extends Error {
   status: number
