@@ -554,7 +554,11 @@ function WalletApp() {
             <div className="mini-avatar">{avatarLetter}</div>
 
             <div>
-              <span>Demo account</span>
+              <span>
+                {user.telegramId.startsWith('demo-')
+                  ? 'Demo browser'
+                  : `@${user.username || 'telegram_user'}`}
+              </span>
               <strong>{user.internalId}</strong>
             </div>
           </div>
