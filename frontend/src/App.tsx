@@ -1,5 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import './App.css'
+import AdminPanel from './AdminPanel'
 
 declare global {
   interface Window {
@@ -172,7 +173,7 @@ function formatDate(value: string) {
   return date.toLocaleString('ru-RU')
 }
 
-function App() {
+function WalletApp() {
   const [telegramProfile] = useState<TelegramProfile>(() => getTelegramProfile())
 
   const [user, setUser] = useState<User | null>(null)
@@ -823,6 +824,18 @@ function App() {
       </section>
     </main>
   )
+}
+
+function App() {
+  const isAdminPage =
+    window.location.pathname.includes('/admin') ||
+    window.location.hash === '#/admin'
+
+  if (isAdminPage) {
+    return <AdminPanel />
+  }
+
+  return <WalletApp />
 }
 
 export default App
