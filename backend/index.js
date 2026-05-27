@@ -395,12 +395,16 @@ app.get('/health', (req, res) => {
 
 app.get('/db/health', async (req, res, next) => {
   try {
-    const result = await query("SELECT datetime('now') AS now")
+    const isPostgres = process.env.DATABASE_URL
+
+    const result = await query(
+      isPostgres ? 'SELECT NOW() AS now' : "SELECT datetime('now') AS now",
+    )
 
     res.json({
       status: 'ok',
       database: 'connected',
-      type: 'sqlite',
+      type: isPostgres ? 'postgres' : 'sqlite',
       path: dbPath,
       now: result.rows[0].now,
     })
