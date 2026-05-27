@@ -285,6 +285,31 @@ function AdminPanel() {
     }
   }
 
+  async function deleteUser(userId: string) {
+    const confirmed = window.confirm(
+        'Удалить пользователя? Все его операции, заявки и торговые сессии тоже будут удалены.',
+    )
+
+    if (!confirmed) {
+        return
+    }
+
+    try {
+        await adminRequest(`/api/admin/users/${userId}`, password, {
+            method: 'DELETE',
+        })
+
+        showNotice('Пользователь удален')
+
+        setSelectedProfile(null)
+        await loadAdminData()
+    } catch (error) {
+    const message = error instanceof Error ? error.message : 'Ошибка'
+
+    showNotice(`Не удалось удалить пользователя: ${message}`)
+  }
+}
+  
   async function updateBalance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -509,8 +534,19 @@ function AdminPanel() {
         {selectedProfile && (
           <section className="admin-profile">
             <div className="admin-card-title">
-              <h2>Профиль пользователя</h2>
-              <span>{selectedProfile.user.internalId}</span>
+                <h2>Профиль пользователя</h2>
+
+                <div className="admin-profile-actions">
+                    <span>{selectedProfile.user.internalId}</span>
+
+                    <button
+                        className="danger"
+                        type="button"
+                         onClick={() => deleteUser(selectedProfile.user.id)}
+                        >
+                        Удалить пользователя
+                    </button>
+                </div>
             </div>
 
             <div className="admin-profile-grid">

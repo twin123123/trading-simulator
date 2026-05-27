@@ -243,6 +243,33 @@ router.get('/users', async (req, res, next) => {
   }
 })
 
+router.delete('/users/:userId', async (req, res, next) => {
+  try {
+    const userRow = await getUserRawById(req.params.userId)
+
+    if (!userRow) {
+      return res.status(404).json({
+        error: 'User not found',
+      })
+    }
+
+    await query(
+      `
+        DELETE FROM users
+        WHERE id = $1
+      `,
+      [req.params.userId],
+    )
+
+    res.json({
+      message: 'User deleted',
+      deletedUser: mapUser(userRow),
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
 router.get('/users/:userId', async (req, res, next) => {
   try {
     const profile = await getAdminUserProfile(req.params.userId)

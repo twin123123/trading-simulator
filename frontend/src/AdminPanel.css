@@ -366,3 +366,19 @@
     flex-direction: column;
   }
 }
+
+.admin-profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-profile-actions .danger {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 0;
+  cursor: pointer;
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #ffffff;
+  font-weight: 900;
+}
