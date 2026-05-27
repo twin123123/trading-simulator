@@ -104,7 +104,7 @@ async function sendTelegramPhoto(telegramId, imageBuffer, caption) {
 async function createTradingReceiptImage({ fullName, internalId, amount }) {
   const safeName = escapeXml(fullName || 'Пользователь')
   const safeInternalId = escapeXml(internalId || 'DEMO')
-  const amountText = escapeXml(`${formatAmount(amount)} DEMO USDT`)
+  const amountText = escapeXml(`${formatAmount(amount)} USDT`)
   const dateText = escapeXml(new Date().toLocaleString('ru-RU'))
 
   const svg = `
@@ -138,7 +138,7 @@ async function createTradingReceiptImage({ fullName, internalId, amount }) {
       <rect x="70" y="60" width="1060" height="600" rx="52" fill="#0f172a" stroke="#24344d" stroke-width="2" filter="url(#shadow)"/>
 
       <rect x="100" y="92" width="190" height="48" rx="24" fill="#052e16"/>
-      <text x="130" y="124" font-family="Arial, sans-serif" font-size="22" font-weight="800" fill="#22c55e">DEMO CHECK</text>
+      <text x="130" y="124" font-family="Arial, sans-serif" font-size="22" font-weight="800" fill="#22c55e">CHECK</text>
 
       <text x="100" y="205" font-family="Arial, sans-serif" font-size="56" font-weight="900" fill="#ffffff">
         Торговля завершена
@@ -180,7 +180,7 @@ async function createTradingReceiptImage({ fullName, internalId, amount }) {
 
       <rect x="650" y="594" width="450" height="48" rx="24" fill="#111827" stroke="#334155"/>
       <text x="690" y="625" font-family="Arial, sans-serif" font-size="18" font-weight="800" fill="#fbbf24">
-        ЛИЧНЫЙ СЧЕТ · ОПЕРАЦИИ С ДЕНЕЖНЫМИ СРЕДСТВАМИ
+        Операции по личному счету
       </text>
     </svg>
   `
