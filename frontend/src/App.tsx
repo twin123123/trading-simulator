@@ -1,11 +1,38 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import './App.css'
 
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        ready?: () => void
+        expand?: () => void
+        initDataUnsafe?: {
+          user?: {
+            id?: number
+            username?: string
+            first_name?: string
+            last_name?: string
+          }
+        }
+      }
+    }
+  }
+}
+
 type User = {
+  id: string
+  telegramId: string
+  username: string | null
+  internalId: string
   fullName: string
   accountNumber: string
   iban: string
-  internalId: string
+  balance: number
+  blockedAmount: number
+  tradingStatus: string
+  createdAt: string
+  updatedAt: string
 }
 
 type TransactionStatus = '🟢 выполнено' | '🟡 в процессе' | '🔴 отклонено'
@@ -25,6 +52,19 @@ type Trade = {
 
 type WalletScreen = 'wallet' | 'withdraw'
 
+type TelegramProfile = {
+  telegramId: string
+  username: string | null
+}
+
+type RegisterResponse = {
+  created: boolean
+  message: string
+  user: User
+}
+
+const API_BASE_URL = 'http://localhost:4000'
+
 const FINAL_BALANCE = 20000
 
 // Сейчас 60 секунд для теста.
@@ -34,6 +74,57 @@ const SIMULATION_DURATION_MS = 60 * 1000
 const MIN_FIRST_TRADE_DELAY_MS = 3000
 
 const MANAGER_LINK = 'https://t.me/username'
+
+class ApiError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+function getTelegramProfile(): TelegramProfile {
+  const telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
+
+  if (telegramUser?.id) {
+    return {
+      telegramId: String(telegramUser.id),
+      username: telegramUser.username || null,
+    }
+  }
+
+  let demoTelegramId = localStorage.getItem('demoTelegramId')
+
+  if (!demoTelegramId) {
+    demoTelegramId = `demo-${Math.floor(100000 + Math.random() * 900000)}`
+    localStorage.setItem('demoTelegramId', demoTelegramId)
+  }
+
+  return {
+    telegramId: demoTelegramId,
+    username: 'local_demo_user',
+  }
+}
+
+async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options?.headers || {}),
+    },
+    ...options,
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const message = data?.error || data?.details || 'API request failed'
+    throw new ApiError(response.status, message)
+  }
+
+  return data as T
+}
 
 function getRandomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min
@@ -83,6 +174,8 @@ function createTrades(): Trade[] {
 }
 
 function App() {
+  const [telegramProfile] = useState<TelegramProfile>(() => getTelegramProfile())
+
   const [user, setUser] = useState<User | null>(null)
 
   const [form, setForm] = useState({
@@ -107,6 +200,46 @@ function App() {
 
   const [showHistory, setShowHistory] = useState(false)
   const [notice, setNotice] = useState('')
+  const [backendError, setBackendError] = useState('')
+  const [isLoadingUser, setIsLoadingUser] = useState(true)
+  const [isRegistering, setIsRegistering] = useState(false)
+
+  useEffect(() => {
+    window.Telegram?.WebApp?.ready?.()
+    window.Telegram?.WebApp?.expand?.()
+  }, [])
+
+  useEffect(() => {
+    async function loadExistingUser() {
+      try {
+        setIsLoadingUser(true)
+        setBackendError('')
+
+        const existingUser = await apiRequest<User>(
+          `/api/users/by-telegram/${telegramProfile.telegramId}`,
+        )
+
+        setUser(existingUser)
+        setBalance(existingUser.balance)
+        setBlockedAmount(existingUser.blockedAmount)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          return
+        }
+
+        const message =
+          error instanceof Error ? error.message : 'Неизвестная ошибка'
+
+        setBackendError(
+          `Backend недоступен или вернул ошибку: ${message}. Проверь, что backend запущен на localhost:4000.`,
+        )
+      } finally {
+        setIsLoadingUser(false)
+      }
+    }
+
+    loadExistingUser()
+  }, [telegramProfile.telegramId])
 
   function showNotice(text: string) {
     setNotice(text)
@@ -125,17 +258,40 @@ function App() {
     })
   }
 
-  function handleRegister(event: FormEvent<HTMLFormElement>) {
+  async function handleRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    const randomId = Math.floor(100000 + Math.random() * 900000)
+    try {
+      setIsRegistering(true)
+      setBackendError('')
 
-    setUser({
-      fullName: form.fullName,
-      accountNumber: form.accountNumber,
-      iban: form.iban,
-      internalId: `TRD-${randomId}`,
-    })
+      const response = await apiRequest<RegisterResponse>('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          fullName: form.fullName,
+          accountNumber: form.accountNumber,
+          iban: form.iban,
+          telegramId: telegramProfile.telegramId,
+          username: telegramProfile.username,
+        }),
+      })
+
+      setUser(response.user)
+      setBalance(response.user.balance)
+      setBlockedAmount(response.user.blockedAmount)
+
+      showNotice(
+        response.created
+          ? 'Демо-аккаунт создан и сохранен в БД'
+          : 'Аккаунт уже существует, данные загружены из БД',
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Ошибка'
+
+      setBackendError(`Не удалось зарегистрироваться: ${message}`)
+    } finally {
+      setIsRegistering(false)
+    }
   }
 
   function addTransaction(transaction: Omit<Transaction, 'id' | 'date'>) {
@@ -243,6 +399,28 @@ function App() {
     showNotice('Заявка на вывод создана')
   }
 
+  if (isLoadingUser) {
+    return (
+      <main className="app">
+        <section className="auth-card">
+          <div className="brand-row">
+            <div className="brand-logo">T</div>
+            <div>
+              <strong>Trading Wallet</strong>
+              <span>Demo Mini App</span>
+            </div>
+          </div>
+
+          <h1>Загрузка аккаунта</h1>
+
+          <p className="auth-description">
+            Проверяем, есть ли пользователь в локальной БД.
+          </p>
+        </section>
+      </main>
+    )
+  }
+
   if (!user) {
     return (
       <main className="app">
@@ -261,6 +439,8 @@ function App() {
             Виртуальный торговый счет для симуляции. Баланс и операции не
             являются реальными деньгами.
           </p>
+
+          {backendError && <div className="notice">{backendError}</div>}
 
           <form className="auth-form" onSubmit={handleRegister}>
             <label>
@@ -296,7 +476,9 @@ function App() {
               />
             </label>
 
-            <button type="submit">Продолжить</button>
+            <button type="submit" disabled={isRegistering}>
+              {isRegistering ? 'Сохраняем...' : 'Продолжить'}
+            </button>
           </form>
         </section>
       </main>
@@ -339,8 +521,8 @@ function App() {
               <p>Демо-заявка</p>
               <h1>Вывод средств</h1>
               <span>
-                Сумма будет заблокирована и добавлена в историю со статусом
-                “в процессе”.
+                Сумма будет заблокирована и добавлена в историю со статусом “в
+                процессе”.
               </span>
             </div>
 
