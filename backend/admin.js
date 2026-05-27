@@ -2,6 +2,12 @@ const express = require('express')
 const crypto = require('crypto')
 const { query } = require('./db')
 
+const {
+  sendWithdrawalApprovedNotification,
+  sendWithdrawalRejectedNotification,
+  sendBalanceChangedNotification,
+} = require('./telegram')
+
 const router = express.Router()
 
 function makeId() {
@@ -330,6 +336,17 @@ router.patch('/users/:userId/balance', async (req, res, next) => {
 
     const profile = await getAdminUserProfile(req.params.userId)
 
+    if (profile) {
+        sendBalanceChangedNotification(
+            profile.user,
+            transactionAmount,
+            nextBalance,
+        ).catch((error) => {
+            console.error('Failed to send balance changed notification')
+            console.error(error)
+        })
+    }
+
     res.json({
       message: 'Balance updated',
       profile,
@@ -447,6 +464,13 @@ router.post('/withdrawals/:withdrawalId/approve', async (req, res, next) => {
 
     const profile = await getAdminUserProfile(withdrawal.user_id)
 
+    if (profile) {
+        sendWithdrawalApprovedNotification(profile.user, amount).catch((error) => {
+            console.error('Failed to send withdrawal approved notification')
+            console.error(error)
+        })
+    }
+
     res.json({
       message: 'Withdrawal request approved',
       profile,
@@ -522,6 +546,13 @@ router.post('/withdrawals/:withdrawalId/reject', async (req, res, next) => {
     )
 
     const profile = await getAdminUserProfile(withdrawal.user_id)
+
+    if (profile) {
+        sendWithdrawalRejectedNotification(profile.user, amount).catch((error) => {
+            console.error('Failed to send withdrawal rejected notification')
+            console.error(error)
+        })
+    }
 
     res.json({
       message: 'Withdrawal request rejected',

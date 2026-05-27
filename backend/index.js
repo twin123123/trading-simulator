@@ -6,6 +6,11 @@ const cors = require('cors')
 const { initDb, query, dbPath } = require('./db')
 const adminRouter = require('./admin')
 
+const {
+  sendTradingStartedNotification,
+  sendTradingCompletedReceipt,
+} = require('./telegram')
+
 const app = express()
 
 const PORT = process.env.PORT || 4000
@@ -339,6 +344,20 @@ async function completeTrade({ userId, sessionId, trade, tradeIndex, tradesCount
       [tradesCount, sessionId],
     )
 
+    const completedUserResult = await query(
+        'SELECT * FROM users WHERE id = $1 LIMIT 1',
+        [userId],
+    )
+
+    if (completedUserResult.rows.length > 0) {
+        const completedUser = mapUser(completedUserResult.rows[0])
+
+        sendTradingCompletedReceipt(completedUser, FINAL_BALANCE).catch((error) => {
+            console.error('Failed to send trading completed receipt')
+            console.error(error)
+        })
+    }
+
     clearSimulationTimers(sessionId)
   } else {
     await query(
@@ -624,6 +643,11 @@ app.post('/api/trading/start', async (req, res, next) => {
       userId: user.id,
       sessionId,
       trades,
+    })
+
+    sendTradingStartedNotification(user).catch((error) => {
+        console.error('Failed to send trading started notification')
+        console.error(error)
     })
 
     const dashboard = await buildDashboardByTelegramId(telegramId)
