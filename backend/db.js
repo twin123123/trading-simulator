@@ -16,16 +16,28 @@ const database = new DatabaseSync(dbPath, {
 
 database.exec('PRAGMA foreign_keys = ON;')
 
-function convertPostgresPlaceholdersToSqlite(sql) {
-  return sql.replace(/\$(\d+)/g, '?')
+function convertPostgresQueryToSqlite(text, params = []) {
+  const values = []
+
+  const sql = text.trim().replace(/\$(\d+)/g, (_, indexText) => {
+    const paramIndex = Number(indexText) - 1
+
+    values.push(params[paramIndex])
+
+    return '?'
+  })
+
+  return {
+    sql,
+    values,
+  }
 }
 
 async function query(text, params = []) {
   const startedAt = Date.now()
 
   try {
-    const sql = convertPostgresPlaceholdersToSqlite(text.trim())
-    const values = Array.isArray(params) ? params : []
+    const { sql, values } = convertPostgresQueryToSqlite(text, params)
 
     const isReadQuery = /^\s*(SELECT|WITH|PRAGMA)/i.test(sql)
     const hasReturning = /\bRETURNING\b/i.test(sql)

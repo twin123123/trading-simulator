@@ -59,10 +59,22 @@ type TradingSession = {
   status: string
 }
 
+type WithdrawalRequest = {
+  id: string
+  userId: string
+  amount: number
+  accountNumber: string
+  iban: string
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
 type DashboardResponse = {
   user: User
   transactions: Transaction[]
   tradingSession: TradingSession | null
+  withdrawalRequests: WithdrawalRequest[]
 }
 
 type RegisterResponse = {
@@ -73,6 +85,12 @@ type RegisterResponse = {
 
 type TradingStartResponse = {
   message: string
+  dashboard: DashboardResponse
+}
+
+type WithdrawalCreateResponse = {
+  message: string
+  withdrawalRequest: WithdrawalRequest
   dashboard: DashboardResponse
 }
 
@@ -138,10 +156,6 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   return data as T
 }
 
-function makeId() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
 function formatAmount(value: number) {
   return value.toLocaleString('ru-RU', {
     maximumFractionDigits: 2,
@@ -187,6 +201,7 @@ function App() {
   const [isLoadingUser, setIsLoadingUser] = useState(true)
   const [isRegistering, setIsRegistering] = useState(false)
   const [isStartingTrading, setIsStartingTrading] = useState(false)
+  const [isCreatingWithdrawal, setIsCreatingWithdrawal] = useState(false)
 
   useEffect(() => {
     window.Telegram?.WebApp?.ready?.()
@@ -326,22 +341,6 @@ function App() {
     }
   }
 
-  function addLocalTransaction(transaction: {
-    type: string
-    amount: number
-    status: string
-  }) {
-    setTransactions((currentTransactions) => [
-      {
-        id: makeId(),
-        userId: user?.id || '',
-        createdAt: new Date().toISOString(),
-        ...transaction,
-      },
-      ...currentTransactions,
-    ])
-  }
-
   async function startTradingSimulation() {
     try {
       setIsStartingTrading(true)
@@ -390,7 +389,7 @@ function App() {
     setScreen('withdraw')
   }
 
-  function handleCreateWithdrawal(event: FormEvent<HTMLFormElement>) {
+  async function handleCreateWithdrawal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const normalizedAmount = withdrawAmount.replace(',', '.')
@@ -406,19 +405,41 @@ function App() {
       return
     }
 
-    setBalance((currentBalance) => currentBalance - amount)
-    setBlockedAmount((currentBlockedAmount) => currentBlockedAmount + amount)
+    try {
+      setIsCreatingWithdrawal(true)
+      setBackendError('')
 
-    addLocalTransaction({
-      type: 'заявка на вывод',
-      amount: -amount,
-      status: '🟡 в процессе',
-    })
+      const response = await apiRequest<WithdrawalCreateResponse>(
+        '/api/withdrawals',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            telegramId: telegramProfile.telegramId,
+            amount,
+          }),
+        },
+      )
 
-    setWithdrawAmount('')
-    setScreen('wallet')
-    setShowHistory(true)
-    showNotice('Заявка на вывод создана локально. Backend для вывода сделаем следующим шагом.')
+      applyDashboard(response.dashboard)
+
+      setWithdrawAmount('')
+      setScreen('wallet')
+      setShowHistory(true)
+
+      showNotice('Заявка на вывод создана и сохранена в БД')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Ошибка'
+
+      showNotice(`Не удалось создать заявку: ${message}`)
+
+      try {
+        await loadDashboardFromBackend()
+      } catch {
+        // Игнорируем дополнительную ошибку обновления.
+      }
+    } finally {
+      setIsCreatingWithdrawal(false)
+    }
   }
 
   if (isLoadingUser) {
@@ -594,7 +615,9 @@ function App() {
               </label>
 
               <div className="form-actions">
-                <button type="submit">Создать заявку</button>
+                <button type="submit" disabled={isCreatingWithdrawal}>
+                  {isCreatingWithdrawal ? 'Создаем...' : 'Создать заявку'}
+                </button>
 
                 <button
                   className="secondary-button"
@@ -625,9 +648,7 @@ function App() {
                   disabled={isStartingTrading}
                 >
                   <span>▶</span>
-                  <small>
-                    {isStartingTrading ? 'Запуск...' : 'Торговля'}
-                  </small>
+                  <small>{isStartingTrading ? 'Запуск...' : 'Торговля'}</small>
                 </button>
               )}
 

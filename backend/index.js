@@ -36,6 +36,14 @@ function getRandomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min
 }
 
+function normalizeAmount(value) {
+  if (typeof value === 'string') {
+    return Number(value.replace(',', '.'))
+  }
+
+  return Number(value)
+}
+
 function createTrades() {
   const tradesCount = getRandomInt(12, 16)
 
@@ -91,6 +99,19 @@ function mapTransaction(row) {
     amount: Number(row.amount || 0),
     status: row.status,
     createdAt: row.created_at,
+  }
+}
+
+function mapWithdrawalRequest(row) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    amount: Number(row.amount || 0),
+    accountNumber: row.account_number,
+    iban: row.iban,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }
 }
 
@@ -159,6 +180,20 @@ async function getTransactionsByUserId(userId) {
   return result.rows.map(mapTransaction)
 }
 
+async function getWithdrawalRequestsByUserId(userId) {
+  const result = await query(
+    `
+      SELECT *
+      FROM withdrawal_requests
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+    `,
+    [userId],
+  )
+
+  return result.rows.map(mapWithdrawalRequest)
+}
+
 async function getLatestTradingSession(userId) {
   const result = await query(
     `
@@ -185,15 +220,17 @@ async function buildDashboardByTelegramId(telegramId) {
     return null
   }
 
-  const [transactions, tradingSession] = await Promise.all([
+  const [transactions, tradingSession, withdrawalRequests] = await Promise.all([
     getTransactionsByUserId(user.id),
     getLatestTradingSession(user.id),
+    getWithdrawalRequestsByUserId(user.id),
   ])
 
   return {
     user,
     transactions,
     tradingSession,
+    withdrawalRequests,
   }
 }
 
@@ -472,6 +509,48 @@ app.get('/api/users/:userId/transactions', async (req, res, next) => {
   }
 })
 
+app.get('/api/users/:userId/withdrawals', async (req, res, next) => {
+  try {
+    const withdrawalRequests = await getWithdrawalRequestsByUserId(
+      req.params.userId,
+    )
+
+    res.json(withdrawalRequests)
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/withdrawals', async (req, res, next) => {
+  try {
+    const result = await query(`
+      SELECT
+        withdrawal_requests.*,
+        users.internal_id AS user_internal_id,
+        users.full_name AS user_full_name,
+        users.telegram_id AS user_telegram_id,
+        users.username AS user_username
+      FROM withdrawal_requests
+      JOIN users ON users.id = withdrawal_requests.user_id
+      ORDER BY withdrawal_requests.created_at DESC
+    `)
+
+    res.json(
+      result.rows.map((row) => ({
+        ...mapWithdrawalRequest(row),
+        user: {
+          internalId: row.user_internal_id,
+          fullName: row.user_full_name,
+          telegramId: row.user_telegram_id,
+          username: row.user_username,
+        },
+      })),
+    )
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/trading/start', async (req, res, next) => {
   try {
     const { telegramId } = req.body
@@ -549,6 +628,112 @@ app.post('/api/trading/start', async (req, res, next) => {
 
     res.status(201).json({
       message: 'Trading simulation started',
+      dashboard,
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.post('/api/withdrawals', async (req, res, next) => {
+  try {
+    const { telegramId, amount } = req.body
+
+    if (!telegramId) {
+      return res.status(400).json({
+        error: 'telegramId is required',
+      })
+    }
+
+    const normalizedAmount = normalizeAmount(amount)
+
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      return res.status(400).json({
+        error: 'Correct withdrawal amount is required',
+      })
+    }
+
+    const user = await getUserByTelegramId(telegramId)
+
+    if (!user) {
+      return res.status(404).json({
+        error: 'User not found',
+      })
+    }
+
+    if (user.tradingStatus === 'active') {
+      return res.status(409).json({
+        error: 'Withdrawal is available only after trading simulation is completed',
+      })
+    }
+
+    if (normalizedAmount > user.balance) {
+      return res.status(400).json({
+        error: 'Withdrawal amount is greater than available balance',
+      })
+    }
+
+    const withdrawalId = makeId()
+
+    const createdWithdrawalResult = await query(
+      `
+        INSERT INTO withdrawal_requests (
+          id,
+          user_id,
+          amount,
+          account_number,
+          iban,
+          status
+        )
+        VALUES ($1, $2, $3, $4, $5, 'in_process')
+        RETURNING *
+      `,
+      [
+        withdrawalId,
+        user.id,
+        normalizedAmount,
+        user.accountNumber,
+        user.iban,
+      ],
+    )
+
+    await query(
+      `
+        INSERT INTO transactions (
+          id,
+          user_id,
+          type,
+          amount,
+          status
+        )
+        VALUES ($1, $2, $3, $4, $5)
+      `,
+      [
+        makeId(),
+        user.id,
+        'заявка на вывод',
+        -normalizedAmount,
+        '🟡 в процессе',
+      ],
+    )
+
+    await query(
+      `
+        UPDATE users
+        SET
+          balance = balance - $1,
+          blocked_amount = blocked_amount + $1,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+      `,
+      [normalizedAmount, user.id],
+    )
+
+    const dashboard = await buildDashboardByTelegramId(telegramId)
+
+    res.status(201).json({
+      message: 'Withdrawal request created',
+      withdrawalRequest: mapWithdrawalRequest(createdWithdrawalResult.rows[0]),
       dashboard,
     })
   } catch (error) {
