@@ -3,7 +3,7 @@ require('dotenv').config()
 const crypto = require('crypto')
 const express = require('express')
 const cors = require('cors')
-const { initDb, query, dbPath } = require('./db')
+const { initDb, query, dbPath } = require('./database')
 const adminRouter = require('./admin')
 
 const {

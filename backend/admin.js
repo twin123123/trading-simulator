@@ -1,6 +1,6 @@
 const express = require('express')
 const crypto = require('crypto')
-const { query } = require('./db')
+const { query } = require('./database')
 
 const {
   sendWithdrawalApprovedNotification,
