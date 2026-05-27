@@ -145,13 +145,13 @@ async function createTradingReceiptImage({ fullName, internalId, amount }) {
       </text>
 
       <text x="100" y="258" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#94a3b8">
-        Виртуальная торговая симуляция
+        Результат проведенной торговли
       </text>
 
       <rect x="100" y="305" width="1000" height="160" rx="34" fill="url(#blue)"/>
 
       <text x="140" y="365" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="rgba(255,255,255,0.84)">
-        Заработано в симуляции
+        Заработано с торговли
       </text>
 
       <text x="140" y="430" font-family="Arial, sans-serif" font-size="58" font-weight="900" fill="#ffffff">
@@ -180,7 +180,7 @@ async function createTradingReceiptImage({ fullName, internalId, amount }) {
 
       <rect x="650" y="594" width="450" height="48" rx="24" fill="#111827" stroke="#334155"/>
       <text x="690" y="625" font-family="Arial, sans-serif" font-size="18" font-weight="800" fill="#fbbf24">
-        DEMO · НЕ РЕАЛЬНЫЕ ДЕНЬГИ
+        ЛИЧНЫЙ СЧЕТ · ОПЕРАЦИИ С ДЕНЕЖНЫМИ СРЕДСТВАМИ
       </text>
     </svg>
   `
@@ -192,12 +192,12 @@ async function sendTradingStartedNotification(user) {
   return sendTelegramMessage(
     user.telegramId,
     [
-      '🚀 <b>Симуляция торговли запущена</b>',
+      '🚀 <b>Торговля запущена</b>',
       '',
       `ID: <b>${escapeHtml(user.internalId)}</b>`,
       'Ожидайте завершения торговой сессии.',
       '',
-      'Демо-режим: баланс виртуальный, реальные средства не используются.',
+      'По завершении торговли, средства будут автоматически зачислены на ваш баланс',
     ].join('\n'),
   )
 }
@@ -213,12 +213,12 @@ async function sendTradingCompletedReceipt(user, amount) {
     user.telegramId,
     imageBuffer,
     [
-      '✅ <b>Симуляция торговли завершена</b>',
+      '✅ <b>Торговля завершена</b>',
       '',
-      `Заработано: <b>${formatAmount(amount)} DEMO USDT</b>`,
-      'Демо-чек прикреплен изображением.',
+      `Заработано: <b>${formatAmount(amount)} USDT</b>`,
+      'Чек прикреплен изображением.',
       '',
-      'Это виртуальная симуляция, не реальный финансовый документ.',
+      'Официальный документ, подтверждающий результат торговой сессии.',
     ].join('\n'),
   )
 }
@@ -227,12 +227,12 @@ async function sendWithdrawalApprovedNotification(user, amount) {
   return sendTelegramMessage(
     user.telegramId,
     [
-      '✅ <b>Демо-заявка на вывод одобрена</b>',
+      '✅ <b>Заявка на вывод одобрена</b>',
       '',
-      `Сумма: <b>${formatAmount(amount)} DEMO USDT</b>`,
+      `Сумма: <b>${formatAmount(amount)}  USDT</b>`,
       'Статус: выполнено.',
       '',
-      'Демо-режим: реальные средства не переводятся.',
+      'За статусом заявки обратитесь к менеджеру',
     ].join('\n'),
   )
 }
@@ -241,10 +241,10 @@ async function sendWithdrawalRejectedNotification(user, amount) {
   return sendTelegramMessage(
     user.telegramId,
     [
-      '❌ <b>Демо-заявка на вывод отклонена</b>',
+      '❌ <b>Заявка на вывод отклонена</b>',
       '',
-      `Сумма: <b>${formatAmount(amount)} DEMO USDT</b>`,
-      'Сумма возвращена на виртуальный баланс.',
+      `Сумма: <b>${formatAmount(amount)} USDT</b>`,
+      'Сумма возвращена на ваш баланс.',
     ].join('\n'),
   )
 }
@@ -256,13 +256,13 @@ async function sendBalanceChangedNotification(user, amountChange, nextBalance) {
     user.telegramId,
     [
       isPositive
-        ? '💰 <b>На ваш демо-баланс зачислены средства</b>'
-        : '⚠️ <b>Ваш демо-баланс изменен администратором</b>',
+        ? '💰 <b>На ваш личный счет зачислены средства</b>'
+        : '⚠️ <b>Ваш личный счет изменен</b>',
       '',
-      `${isPositive ? 'Начислено' : 'Изменение'}: <b>${isPositive ? '+' : ''}${formatAmount(amountChange)} DEMO USDT</b>`,
-      `Текущий баланс: <b>${formatAmount(nextBalance)} DEMO USDT</b>`,
+      `${isPositive ? 'Начислено' : 'Изменение'}: <b>${isPositive ? '+' : ''}${formatAmount(amountChange)} USDT</b>`,
+      `Текущий баланс: <b>${formatAmount(nextBalance)} USDT</b>`,
       '',
-      'Демо-режим: баланс виртуальный.',
+      'Личный счет: баланс реальных средств.',
     ].join('\n'),
   )
 }

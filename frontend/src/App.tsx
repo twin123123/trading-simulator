@@ -104,7 +104,7 @@ type TelegramProfile = {
 
 const API_BASE_URL = 'https://trading-simulator-backend-gad1.onrender.com'
 
-const MANAGER_LINK = 'https://t.me/username'
+const MANAGER_LINK = 'https://t.me/dedayoug'
 
 class ApiError extends Error {
   status: number
@@ -330,8 +330,8 @@ function WalletApp() {
 
       showNotice(
         response.created
-          ? 'Демо-аккаунт создан и сохранен в БД'
-          : 'Аккаунт уже существует, данные загружены из БД',
+          ? 'Аккаунт создан и сохранен'
+          : 'Загрузка аккаунта',
       )
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ошибка'
@@ -359,7 +359,7 @@ function WalletApp() {
 
       applyDashboard(response.dashboard)
       setShowHistory(true)
-      showNotice('Симуляция торговли запущена')
+      showNotice('Торговая сессия запущена')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ошибка'
 
@@ -377,12 +377,12 @@ function WalletApp() {
 
   function openWithdrawScreen() {
     if (user?.tradingStatus === 'active') {
-      showNotice('Вывод доступен после завершения симуляции')
+      showNotice('Вывод доступен после завершения торговли')
       return
     }
 
     if (balance <= 0) {
-      showNotice('На балансе пока нет средств для демо-заявки')
+      showNotice('На балансе пока нет средств для вывода')
       return
     }
 
@@ -427,7 +427,7 @@ function WalletApp() {
       setScreen('wallet')
       setShowHistory(true)
 
-      showNotice('Заявка на вывод создана и сохранена в БД')
+      showNotice('Заявка на вывод создана! ')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ошибка'
 
@@ -477,10 +477,10 @@ function WalletApp() {
             </div>
           </div>
 
-          <h1>Создать демо-кошелек</h1>
+          <h1>Создать кошелек</h1>
 
           <p className="auth-description">
-            Виртуальный торговый счет для симуляции. Баланс и операции не
+            Ваш торговый счет. Баланс и операции
             являются реальными деньгами.
           </p>
 
@@ -499,7 +499,7 @@ function WalletApp() {
             </label>
 
             <label>
-              Номер счета
+              Номер телефона или email
               <input
                 name="accountNumber"
                 value={form.accountNumber}
@@ -573,7 +573,7 @@ function WalletApp() {
         {screen === 'withdraw' && (
           <section className="withdraw-card">
             <div className="withdraw-header">
-              <p>Демо-заявка</p>
+              <p>Заявка на вывод</p>
               <h1>Вывод средств</h1>
               <span>
                 Сумма будет заблокирована и добавлена в историю со статусом “в
@@ -606,7 +606,7 @@ function WalletApp() {
               </label>
 
               <label>
-                Номер счета
+                Номер телефона или email
                 <input
                   className="readonly-input"
                   value={user.accountNumber}
@@ -639,9 +639,9 @@ function WalletApp() {
         {screen === 'wallet' && (
           <>
             <section className="hero-balance">
-              <p>Демо-баланс</p>
+              <p>Баланс</p>
               <h1>{formatAmount(balance)} USDT</h1>
-              <span>Виртуальный счет · реальные средства не используются</span>
+              <span>Ваш личный счет</span>
             </section>
 
             <section className="quick-actions">
@@ -691,8 +691,8 @@ function WalletApp() {
                   <div>
                     <p>
                       {isTrading
-                        ? 'Симуляция запущена'
-                        : 'Симуляция завершена'}
+                        ? 'Торговля запущена'
+                        : 'Торговля завершена'}
                     </p>
 
                     <strong>
@@ -734,7 +734,7 @@ function WalletApp() {
                 <div className="asset-icon">₮</div>
 
                 <div className="asset-info">
-                  <strong>Demo USDT</strong>
+                  <strong>USDT</strong>
                   <span>Доступный баланс</span>
                 </div>
 
