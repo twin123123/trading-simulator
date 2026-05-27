@@ -382,3 +382,29 @@
   color: #ffffff;
   font-weight: 900;
 }
+
+.admin-profile-withdrawal {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(2, 6, 23, 0.54);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  display: grid;
+  gap: 12px;
+}
+
+.admin-profile-withdrawal-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-profile-withdrawal strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.admin-profile-withdrawal span {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+}

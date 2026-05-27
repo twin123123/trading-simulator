@@ -639,19 +639,41 @@ function AdminPanel() {
                 <h3>Заявки пользователя</h3>
 
                 <div className="admin-list compact">
-                  {selectedProfile.withdrawalRequests.map((withdrawal) => (
-                    <div className="admin-transaction" key={withdrawal.id}>
-                      <div>
-                        <strong>{formatAmount(withdrawal.amount)} USDT</strong>
-                        <span>{formatDate(withdrawal.createdAt)}</span>
-                      </div>
+                    {selectedProfile.withdrawalRequests.map((withdrawal) => (
+                        <div className="admin-profile-withdrawal" key={withdrawal.id}>
+                            <div className="admin-profile-withdrawal-main">
+                                <div>
+                                    <strong>{formatAmount(withdrawal.amount)} USDT</strong>
+                                    <span>{formatDate(withdrawal.createdAt)}</span>
+                                </div>
 
-                      <div>
-                        <strong>{getWithdrawalStatusLabel(withdrawal.status)}</strong>
-                        <span>{withdrawal.iban}</span>
-                      </div>
-                    </div>
-                  ))}
+                                <div>
+                                    <strong>{getWithdrawalStatusLabel(withdrawal.status)}</strong>
+                                    <span>{withdrawal.iban}</span>
+                                </div>
+                            </div>
+
+                            {withdrawal.status === 'in_process' && (
+                                <div className="admin-actions">
+                                    <button
+                                        className="approve"
+                                        type="button"
+                                        onClick={() => approveWithdrawal(withdrawal.id)}
+                                    >
+                                        Одобрить
+                                    </button>
+
+                                    <button
+                                        className="reject"
+                                        type="button"
+                                        onClick={() => rejectWithdrawal(withdrawal.id)}
+                                    >
+                                        Отклонить
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
 
                   {selectedProfile.withdrawalRequests.length === 0 && (
                     <p className="admin-empty">Заявок пока нет</p>
