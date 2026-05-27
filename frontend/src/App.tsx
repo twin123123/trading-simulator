@@ -35,19 +35,45 @@ type User = {
   updatedAt: string
 }
 
-type TransactionStatus = '🟢 выполнено' | '🟡 в процессе' | '🔴 отклонено'
-
 type Transaction = {
   id: string
-  date: string
+  userId: string
   type: string
   amount: number
-  status: TransactionStatus
+  status: string
+  createdAt: string
 }
 
-type Trade = {
-  amount: number
-  delay: number
+type TradingSession = {
+  id: string
+  userId: string
+  tradesCount: number
+  plannedTrades: {
+    index: number
+    amount: number
+    delay: number
+  }[]
+  completedTrades: number
+  startedAt: string
+  finishedAt: string | null
+  status: string
+}
+
+type DashboardResponse = {
+  user: User
+  transactions: Transaction[]
+  tradingSession: TradingSession | null
+}
+
+type RegisterResponse = {
+  created: boolean
+  message: string
+  user: User
+}
+
+type TradingStartResponse = {
+  message: string
+  dashboard: DashboardResponse
 }
 
 type WalletScreen = 'wallet' | 'withdraw'
@@ -57,21 +83,7 @@ type TelegramProfile = {
   username: string | null
 }
 
-type RegisterResponse = {
-  created: boolean
-  message: string
-  user: User
-}
-
 const API_BASE_URL = 'http://localhost:4000'
-
-const FINAL_BALANCE = 20000
-
-// Сейчас 60 секунд для теста.
-// Потом поменяем на 60 * 60 * 1000, чтобы было 60 минут.
-const SIMULATION_DURATION_MS = 60 * 1000
-
-const MIN_FIRST_TRADE_DELAY_MS = 3000
 
 const MANAGER_LINK = 'https://t.me/username'
 
@@ -126,10 +138,6 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
   return data as T
 }
 
-function getRandomInt(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min
-}
-
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
@@ -140,37 +148,14 @@ function formatAmount(value: number) {
   })
 }
 
-function getCurrentDate() {
-  return new Date().toLocaleString('ru-RU')
-}
+function formatDate(value: string) {
+  const date = new Date(value)
 
-function createTrades(): Trade[] {
-  const tradesCount = getRandomInt(12, 16)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
 
-  const weights = Array.from({ length: tradesCount }, () => Math.random() + 0.2)
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
-
-  const amounts = weights.map((weight) =>
-    Math.floor((weight / totalWeight) * FINAL_BALANCE),
-  )
-
-  const sumWithoutLastTrade = amounts
-    .slice(0, -1)
-    .reduce((sum, amount) => sum + amount, 0)
-
-  amounts[tradesCount - 1] = FINAL_BALANCE - sumWithoutLastTrade
-
-  const delays = Array.from({ length: tradesCount }, () =>
-    Math.round(
-      MIN_FIRST_TRADE_DELAY_MS +
-        Math.random() * (SIMULATION_DURATION_MS - MIN_FIRST_TRADE_DELAY_MS),
-    ),
-  ).sort((a, b) => a - b)
-
-  return amounts.map((amount, index) => ({
-    amount,
-    delay: delays[index],
-  }))
+  return date.toLocaleString('ru-RU')
 }
 
 function App() {
@@ -189,20 +174,19 @@ function App() {
   const [balance, setBalance] = useState(0)
   const [blockedAmount, setBlockedAmount] = useState(0)
   const [withdrawAmount, setWithdrawAmount] = useState('')
+
   const [transactions, setTransactions] = useState<Transaction[]>([])
-
-  const [isTrading, setIsTrading] = useState(false)
-  const [tradingStarted, setTradingStarted] = useState(false)
-  const [tradingFinished, setTradingFinished] = useState(false)
-
-  const [plannedTradesCount, setPlannedTradesCount] = useState(0)
-  const [completedTradesCount, setCompletedTradesCount] = useState(0)
+  const [tradingSession, setTradingSession] = useState<TradingSession | null>(
+    null,
+  )
 
   const [showHistory, setShowHistory] = useState(false)
   const [notice, setNotice] = useState('')
   const [backendError, setBackendError] = useState('')
+
   const [isLoadingUser, setIsLoadingUser] = useState(true)
   const [isRegistering, setIsRegistering] = useState(false)
+  const [isStartingTrading, setIsStartingTrading] = useState(false)
 
   useEffect(() => {
     window.Telegram?.WebApp?.ready?.()
@@ -210,18 +194,22 @@ function App() {
   }, [])
 
   useEffect(() => {
+    let isMounted = true
+
     async function loadExistingUser() {
       try {
         setIsLoadingUser(true)
         setBackendError('')
 
-        const existingUser = await apiRequest<User>(
-          `/api/users/by-telegram/${telegramProfile.telegramId}`,
+        const dashboard = await apiRequest<DashboardResponse>(
+          `/api/users/by-telegram/${telegramProfile.telegramId}/dashboard`,
         )
 
-        setUser(existingUser)
-        setBalance(existingUser.balance)
-        setBlockedAmount(existingUser.blockedAmount)
+        if (!isMounted) {
+          return
+        }
+
+        applyDashboard(dashboard)
       } catch (error) {
         if (error instanceof ApiError && error.status === 404) {
           return
@@ -234,12 +222,36 @@ function App() {
           `Backend недоступен или вернул ошибку: ${message}. Проверь, что backend запущен на localhost:4000.`,
         )
       } finally {
-        setIsLoadingUser(false)
+        if (isMounted) {
+          setIsLoadingUser(false)
+        }
       }
     }
 
     loadExistingUser()
+
+    return () => {
+      isMounted = false
+    }
   }, [telegramProfile.telegramId])
+
+  useEffect(() => {
+    if (!user || user.tradingStatus !== 'active') {
+      return
+    }
+
+    const timer = window.setInterval(async () => {
+      try {
+        await loadDashboardFromBackend()
+      } catch (error) {
+        console.error(error)
+      }
+    }, 3000)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [user?.tradingStatus, telegramProfile.telegramId])
 
   function showNotice(text: string) {
     setNotice(text)
@@ -247,6 +259,24 @@ function App() {
     window.setTimeout(() => {
       setNotice('')
     }, 3500)
+  }
+
+  function applyDashboard(dashboard: DashboardResponse) {
+    setUser(dashboard.user)
+    setBalance(dashboard.user.balance)
+    setBlockedAmount(dashboard.user.blockedAmount)
+    setTransactions(dashboard.transactions)
+    setTradingSession(dashboard.tradingSession)
+  }
+
+  async function loadDashboardFromBackend() {
+    const dashboard = await apiRequest<DashboardResponse>(
+      `/api/users/by-telegram/${telegramProfile.telegramId}/dashboard`,
+    )
+
+    applyDashboard(dashboard)
+
+    return dashboard
   }
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
@@ -279,6 +309,8 @@ function App() {
       setUser(response.user)
       setBalance(response.user.balance)
       setBlockedAmount(response.user.blockedAmount)
+      setTransactions([])
+      setTradingSession(null)
 
       showNotice(
         response.created
@@ -294,67 +326,57 @@ function App() {
     }
   }
 
-  function addTransaction(transaction: Omit<Transaction, 'id' | 'date'>) {
+  function addLocalTransaction(transaction: {
+    type: string
+    amount: number
+    status: string
+  }) {
     setTransactions((currentTransactions) => [
       {
         id: makeId(),
-        date: getCurrentDate(),
+        userId: user?.id || '',
+        createdAt: new Date().toISOString(),
         ...transaction,
       },
       ...currentTransactions,
     ])
   }
 
-  function startTradingSimulation() {
-    if (tradingStarted) {
-      return
+  async function startTradingSimulation() {
+    try {
+      setIsStartingTrading(true)
+      setBackendError('')
+
+      const response = await apiRequest<TradingStartResponse>(
+        '/api/trading/start',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            telegramId: telegramProfile.telegramId,
+          }),
+        },
+      )
+
+      applyDashboard(response.dashboard)
+      setShowHistory(true)
+      showNotice('Симуляция торговли запущена')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Ошибка'
+
+      showNotice(`Не удалось запустить торговлю: ${message}`)
+
+      try {
+        await loadDashboardFromBackend()
+      } catch {
+        // Игнорируем дополнительную ошибку обновления.
+      }
+    } finally {
+      setIsStartingTrading(false)
     }
-
-    const trades = createTrades()
-
-    setIsTrading(true)
-    setTradingStarted(true)
-    setTradingFinished(false)
-    setPlannedTradesCount(trades.length)
-    setCompletedTradesCount(0)
-    setBalance(0)
-    setBlockedAmount(0)
-    setTransactions([])
-    setShowHistory(false)
-
-    showNotice('Симуляция торговли запущена')
-
-    trades.forEach((trade, index) => {
-      window.setTimeout(() => {
-        const isLastTrade = index === trades.length - 1
-
-        setBalance((currentBalance) => {
-          if (isLastTrade) {
-            return FINAL_BALANCE
-          }
-
-          return currentBalance + trade.amount
-        })
-
-        setCompletedTradesCount((count) => count + 1)
-
-        addTransaction({
-          type: 'начисление (сделка)',
-          amount: trade.amount,
-          status: '🟢 выполнено',
-        })
-
-        if (isLastTrade) {
-          setIsTrading(false)
-          setTradingFinished(true)
-          showNotice('Симуляция завершена. Баланс: 20 000 USDT')
-        }
-      }, trade.delay)
-    })
   }
 
   function openWithdrawScreen() {
-    if (isTrading) {
+    if (user?.tradingStatus === 'active') {
       showNotice('Вывод доступен после завершения симуляции')
       return
     }
@@ -387,7 +409,7 @@ function App() {
     setBalance((currentBalance) => currentBalance - amount)
     setBlockedAmount((currentBlockedAmount) => currentBlockedAmount + amount)
 
-    addTransaction({
+    addLocalTransaction({
       type: 'заявка на вывод',
       amount: -amount,
       status: '🟡 в процессе',
@@ -396,7 +418,7 @@ function App() {
     setWithdrawAmount('')
     setScreen('wallet')
     setShowHistory(true)
-    showNotice('Заявка на вывод создана')
+    showNotice('Заявка на вывод создана локально. Backend для вывода сделаем следующим шагом.')
   }
 
   if (isLoadingUser) {
@@ -486,6 +508,13 @@ function App() {
   }
 
   const avatarLetter = user.fullName.trim().charAt(0).toUpperCase() || 'U'
+
+  const isTrading = user.tradingStatus === 'active'
+  const tradingFinished = user.tradingStatus === 'completed'
+  const tradingStarted = user.tradingStatus !== 'not_started'
+
+  const plannedTradesCount = tradingSession?.tradesCount || 0
+  const completedTradesCount = tradingSession?.completedTrades || 0
 
   return (
     <main className="app">
@@ -593,9 +622,12 @@ function App() {
                   className="round-action primary"
                   type="button"
                   onClick={startTradingSimulation}
+                  disabled={isStartingTrading}
                 >
                   <span>▶</span>
-                  <small>Торговля</small>
+                  <small>
+                    {isStartingTrading ? 'Запуск...' : 'Торговля'}
+                  </small>
                 </button>
               )}
 
@@ -627,7 +659,7 @@ function App() {
               </button>
             </section>
 
-            {(isTrading || tradingFinished) && (
+            {(isTrading || tradingFinished || tradingSession) && (
               <section className="simulation-card">
                 <div className="simulation-top">
                   <div>
@@ -724,7 +756,7 @@ function App() {
                     <div className="transaction" key={transaction.id}>
                       <div>
                         <strong>{transaction.type}</strong>
-                        <span>{transaction.date}</span>
+                        <span>{formatDate(transaction.createdAt)}</span>
                       </div>
 
                       <div className="transaction-right">
